@@ -368,6 +368,7 @@ border-radius:22px;
 background:linear-gradient(115deg, rgba(214,147,255,0.6), rgba(137,92,250,0.25), rgba(190,150,255,0.6));
 opacity:0;
 transition:opacity 0.5s ease;
+pointer-events:none;
 }
 
 .card:hover::before{opacity:1;filter:blur(6px);}
@@ -566,7 +567,7 @@ ESP & Role Detection<br>
 Gun Notifier<br>
 Auto Shoot
 </div>
-<button class="button" onclick="openPassword('mm2')">Get Script</button>
+<button class="button script-btn" type="button" data-hub="mm2">Get Script</button>
 </div>
 
 <div class="card" data-game="sab">
@@ -577,7 +578,7 @@ X-Ray & ESP<br>
 Anti-ragdoll<br>
 Infinite Jump
 </div>
-<a class="button" href="Chilli-Hub.html">Get Script</a>
+<button class="button script-btn" type="button" data-hub="sab">Get Script</button>
 </div>
 
 <div class="card" data-game="bladeball">
@@ -587,7 +588,7 @@ Infinite Jump
 Auto Parry<br>
 Keyless
 </div>
-<a class="button" href="Simple-AP-Bladeball.html">Get Script</a>
+<button class="button script-btn" type="button" data-hub="bladeball">Get Script</button>
 </div>
 
 <div class="card" data-game="universal">
@@ -598,7 +599,7 @@ Fly & Noclip<br>
 Dark Dex<br>
 Command Bar
 </div>
-<a class="button" href="inf-yield.html">Get Script</a>
+<button class="button script-btn" type="button" data-hub="universal">Get Script</button>
 </div>
 
 </div>
@@ -621,7 +622,7 @@ Command Bar
 <input type="password" id="pass" placeholder="Enter security key">
 <br>
 <button class="button" onclick="checkPassword()">Unlock</button>
-<div id="checking">Verifying...</div>
+<div id="checking">Please Enter Password.</div>
 </div>
 
 <div id="errorModal">
@@ -629,6 +630,27 @@ Command Bar
 <p style="font-size:14px;color:#ff0055cc;">Invalid security key</p>
 <button class="button" style="border-color:#ff0055;color:#ff0055" onclick="closeAllModals()">Retry</button>
 </div>
+
+<div id="scriptMenu" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(92vw,860px);max-height:88vh;overflow:auto;background:rgba(26,4,38,0.96);border:1px solid #b47aff88;border-radius:14px;box-shadow:0 0 30px rgba(180,110,255,0.35);z-index:10001;padding:16px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+    <h3 style="margin:0;color:#c98cff;font-family:'Orbitron';letter-spacing:1px;">Script Menu</h3>
+    <button id="closeScriptMenu" style="background:#130b1e;color:#c98cff;border:1px solid #c98cff;border-radius:8px;padding:5px 10px;cursor:pointer;">×</button>
+  </div>
+  <p id="scriptMenuHub" style="color:#d6ffdd;margin:0 0 12px;font-size:14px;"></p>
+  <div id="scriptMenuList" style="display:grid;gap:12px;"></div>
+  <div style="margin-top:10px;"><textarea id="scriptMenuCode" readonly style="width:100%;height:110px;background:#140719;color:#d6a8ff;border:1px solid #bf7fff;border-radius:8px;padding:10px;font-family:'Share Tech Mono';overflow:auto;resize:none;color:#d8b5ff;"></textarea></div>
+  <div style="margin-top:10px;display:flex;gap:10px;justify-content:flex-end;"><button id="copyScriptMenu" style="background:#130d20;color:#d8b5ff;border:1px solid #c78cff;border-radius:8px;padding:8px 12px;cursor:pointer;">Copy</button><button id="closeScriptMenu2" style="background:#130d20;color:#d8b5ff;border:1px solid #c78cff;border-radius:8px;padding:8px 12px;cursor:pointer;">Close</button></div>
+</div>
+
+<div id="remoteHubContainer" style="display:none;position:fixed;inset:0;z-index:10002;background:rgba(8,4,22,0.96);overflow:auto;padding:20px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;color:#00ff9c;font-family:'Orbitron';letter-spacing:1px;">Loaded Hub</h3>
+    <button onclick="closeRemoteHub()" style="background:#0a0a0a;color:#00ff9c;border:1px solid #00ff9c;border-radius:8px;padding:5px 10px;cursor:pointer;">Close</button>
+  </div>
+  <div id="remoteHubContent" style="background:#0a0a0a;border:1px solid #00ff9c;border-radius:10px;padding:15px;color:#d2f4d2;"></div>
+</div>
+
+<div id="copyNotify">Script copied</div>
 
 <script>
 
@@ -677,6 +699,12 @@ document.getElementById("modalOverlay").style.display="none"
 document.getElementById("passwordBox").classList.remove("shake")
 }
 
+async function sha256(str){
+const buf=new TextEncoder().encode(str||"");
+const hash=await crypto.subtle.digest('SHA-256', buf);
+return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
 async function checkPassword(){
 const passwordInput=document.getElementById("pass")
 const passwordBox=document.getElementById("passwordBox")
@@ -685,20 +713,50 @@ checking.style.display="block"
 passwordBox.classList.remove("shake")
 
 try{
-const response=await fetch("/check-password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({hub:currentHub,password:passwordInput.value})})
-const data=await response.json()
+const passwordValue = passwordInput.value || "";
+const passwordHash = await sha256(passwordValue);
+if(currentHub === 'mm2'){
+  if(passwordHash === MM2_HASH){
+    const rawToken='local-mm2-unlocked';
+    const secureHash = await sha256(rawToken + TOKEN_SALT);
 
-if(data.success){
-sessionStorage.setItem("shadow_token",data.token)
-window.location.href="shadowhub.html"
-}else{
-passwordBox.classList.add("shake")
-setTimeout(()=>{
-passwordBox.style.display="none"
-document.getElementById("errorModal").style.display="block"
-},400)
+    sessionStorage.setItem("shadow_token", secureHash);
+    sessionStorage.setItem("shadow_token_raw", rawToken);
+
+    closeAllModals();
+
+
+    showScriptMenu("mm2");
+
+    return;
+  }
 }
 
+if(currentHub !== 'mm2'){
+  const page = SCRIPT_PAGES[currentHub];
+  if(page){
+    closeAllModals();
+    loadHubFromGithub(currentHub);
+    return;
+  }
+}
+
+if(passwordHash === MM2_HASH){
+  const rawToken = Date.now().toString();
+  const secureHash = await sha256(rawToken + TOKEN_SALT);
+
+  sessionStorage.setItem("shadow_token", secureHash);
+  sessionStorage.setItem("shadow_token_raw", rawToken);
+
+  closeAllModals();
+  showScriptMenu(currentHub);
+} else {
+  passwordBox.classList.add("shake");
+  setTimeout(()=>{
+    passwordBox.style.display="none";
+    document.getElementById("errorModal").style.display="block";
+  },400);
+}
 }catch(err){
 alert("Backend offline")
 }
@@ -706,10 +764,180 @@ alert("Backend offline")
 checking.style.display="none"
 }
 
+const TOKEN_SALT="mV3tn8kLq4dRHZ##Y";
+const MM2_HASH = "9871b54e90be561200f8b18a744469dd551d03d572683760fb91dd85595fca47";;
+const SCRIPT_PAGES = {
+  mm2: 'MM2-Shadow-Hub.html',
+  sab: 'Chilli-Hub.html',
+  bladeball: 'Simple-AP-Bladeball.html',
+  universal: 'inf-yield.html'
+};
+const SCRIPT_RAW_URLS = {
+  mm2: 'https://raw.githubusercontent.com/yourname/yourrepo/main/MM2-Shadow-Hub.html',
+  sab: 'https://raw.githubusercontent.com/yourname/yourrepo/main/Chilli-Hub.html',
+  bladeball: 'https://raw.githubusercontent.com/yourname/yourrepo/main/Simple-AP-Bladeball.html',
+  universal: 'https://raw.githubusercontent.com/yourname/yourrepo/main/inf-yield.html'
+};
+const HUB_HASHES = {
+  mm2: "9871b54e90be561200f8b18a744469dd551d03d572683760fb91dd85595fca47"
+};
+const SCRIPT_MAP = {
+  mm2: btoa("loadstring(game:HttpGet(\"https://pastebin.com/raw/ha5Da5WE\"))()"),
+  bladeball: btoa("loadstring(game:HttpGet(\"https://raw.githubusercontent.com/Akash1al/Blade-Ball-Updated-Script/refs/heads/main/Blade-Ball-Script\"))()"),
+  sab: btoa("loadstring(game:HttpGet(\"https://raw.githubusercontent.com/tienkhanh1/spicy/main/Chilli.lua\"))()"),
+  universal: btoa("loadstring(game:HttpGet(\"https://rawscripts.net/raw/Universal-Script-Infinite-Yield-43437\"))()")
+};
+const SCRIPT_HASHES = {
+  mm2: "e796e073f721fc1ee6290d6707d02a4e5bc4c8c3636a908e283e38891e5bb140",
+  bladeball: "daa70c37f62aee3d1f896c4e458386643dc2a46642ec7fe9c4fef25705e0be57",
+  sab: "76d9179f5cf550856d00653b5921e82c0682046e7f1b2b00b1f83308cca15309",
+  universal: "3cc10e2bf3b270b1d40ec712ef5c8df865c72c03e827fc66cb7736a14019c300"
+};
+const SCRIPT_LABEL = {
+  mm2: "MM2 Shadow Hub",
+  bladeball: "Simple Auto Parry",
+  sab: "Chilli Hub (SAB)",
+  universal: "Infinite Yield"
+};
+
 const searchInput=document.getElementById("searchInput")
 const gameFilter=document.getElementById("gameFilter")
 const cards=document.querySelectorAll(".card")
 const counter=document.getElementById("scriptCounter")
+
+async function tokenOk(){
+  const raw = sessionStorage.getItem("shadow_token_raw");
+  const hashed = sessionStorage.getItem("shadow_token");
+  if(!raw || !hashed) return false;
+  return await sha256(raw + TOKEN_SALT) === hashed;
+}
+
+function closeRemoteHub(){
+  const container=document.getElementById('remoteHubContainer');
+  const content=document.getElementById('remoteHubContent');
+  container.style.display='none';
+  content.innerHTML='';
+}
+
+async function loadHubFromGithub(hub){
+  const url = SCRIPT_RAW_URLS[hub];
+  const container = document.getElementById('remoteHubContainer');
+  const content = document.getElementById('remoteHubContent');
+  if(!url){
+    content.textContent = 'No GitHub raw URL configured for this hub.';
+    container.style.display='block';
+    return;
+  }
+
+  container.style.display='block';
+  content.textContent = 'Loading from GitHub...' ;
+
+  try{
+    const response = await fetch(url);
+    if(!response.ok) throw new Error(`Fetch failed ${response.status}`);
+    const text = await response.text();
+ 
+    content.innerHTML = text;
+  }catch(err){
+    content.textContent = `Unable to load remote hub content: ${err.message}`;
+  }
+}
+
+function decodeScript(name){
+  if(!SCRIPT_MAP[name]) return "";
+  return atob(SCRIPT_MAP[name]);
+}
+
+async function showScriptMenu(hub){
+  const menu = document.getElementById("scriptMenu");
+  const list = document.getElementById("scriptMenuList");
+  const selectedHub = hub || "all";
+  document.getElementById("scriptMenuHub").textContent = "Hub: " + (SCRIPT_LABEL[selectedHub] || "All Scripts");
+  list.innerHTML = "";
+
+  const keys = selectedHub === "all" ? Object.keys(SCRIPT_MAP) : [selectedHub];
+  keys.forEach(key=>{
+    if(!SCRIPT_MAP[key]) return;
+    const btn = document.createElement("button");
+    btn.textContent = SCRIPT_LABEL[key] || key;
+    btn.style.width = "100%";
+    btn.style.padding = "10px";
+    btn.style.border = "1px solid #c78cff";
+    btn.style.background = "#140819";
+    btn.style.color = "#d8b5ff";
+    btn.style.cursor = "pointer";
+    btn.style.marginBottom = "8px";
+    btn.addEventListener("click", ()=>{
+      const decoded = decodeScript(key);
+      sha256(decoded).then(hash=>{
+        const styleText = document.getElementById("scriptMenuCode");
+        if(SCRIPT_HASHES[key] && SCRIPT_HASHES[key] !== hash){
+          styleText.value = "Script integrity check failed (hash mismatch).";
+          styleText.style.color = "#ff5454";
+        } else {
+          styleText.value = decoded;
+          styleText.style.color = "#d8b5ff";
+        }
+      });
+    });
+    list.appendChild(btn);
+  });
+
+  const codeArea = document.getElementById("scriptMenuCode");
+  if(keys.length === 1 && SCRIPT_MAP[keys[0]]){
+    const autoValue = decodeScript(keys[0]);
+    const autoHash = await sha256(autoValue);
+    if(SCRIPT_HASHES[keys[0]] && SCRIPT_HASHES[keys[0]] === autoHash){
+      codeArea.value = autoValue;
+      codeArea.style.color = "#d8b5ff";
+    } else {
+      codeArea.value = "Script integrity check failed (hash mismatch).";
+      codeArea.style.color = "#ff5454";
+    }
+  } else {
+    codeArea.value = "";
+    codeArea.style.color = "#d8b5ff";
+  }
+
+  menu.style.display = "block";
+}
+
+const closeScriptMenu = () => document.getElementById("scriptMenu").style.display="none";
+
+const copyScript = () => {
+  const code = document.getElementById("scriptMenuCode");
+  const txt = code.value;
+  if(!txt) return;
+
+  const success = ()=>{
+    const cNotify = document.getElementById("copyNotify");
+    if(cNotify){
+      cNotify.textContent = "Script copied";
+      cNotify.style.opacity = "1";
+      setTimeout(()=>{cNotify.style.opacity = "0";},1700);
+    }
+  };
+
+  const fallback = () => {
+    const area = document.createElement("textarea");
+    area.value = txt;
+    document.body.appendChild(area);
+    area.select();
+    try {
+      document.execCommand("copy");
+      success();
+    } catch (e) {
+      alert("Copy failed. Please copy manually.");
+    }
+    document.body.removeChild(area);
+  };
+
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(success).catch(fallback);
+  } else {
+    fallback();
+  }
+};
 
 let currentCategory="all"
 
@@ -756,6 +984,24 @@ entry.target.classList.add("show")
 })
 
 document.querySelectorAll(".card").forEach(card=>observer.observe(card))
+
+document.querySelectorAll('.script-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const hub = btn.dataset.hub;
+    if(!hub) return;
+
+    if(hub === "mm2"){
+
+      openPassword(hub);
+    } else {
+      showScriptMenu(hub);
+    }
+  });
+});
+
+document.getElementById('closeScriptMenu').addEventListener('click', ()=>{closeScriptMenu();});
+document.getElementById('closeScriptMenu2').addEventListener('click', ()=>{closeScriptMenu();});
+document.getElementById('copyScriptMenu').addEventListener('click', copyScript);
 
 </script>
 
